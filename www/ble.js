@@ -239,6 +239,31 @@ module.exports = {
 
     stopStateNotifications: function (success, failure) {
         cordova.exec(success, failure, "BLE", "stopStateNotifications", []);
+    },
+    
+    /**
+     * 
+     * AITT: add more functions for new scan solution
+     */
+    startScanBLT: function(success, failure, scanDone) {
+        var successWrapper = function(peripheral) {
+            convertToNativeJS(peripheral);
+            success(peripheral);
+        };
+        cordova.exec(scanDone, failure, 'BLE', 'registerScanDoneNotification', []);
+        cordova.exec(successWrapper, failure, 'BLE', 'startScanBLT', []);
+    },
+
+    isDiscovering: function(success, failure) {
+        cordova.exec(success, failure, 'BLE', 'isDiscovering', []);
+    },
+    
+    startDiscovery: function(success, failure) {
+        cordova.exec(success, failure, 'BLE', 'startDiscovery', []);
+    },
+
+    cancelDiscovery: function(success, failure) {
+        cordova.exec(success, failure, 'BLE', 'cancelDiscovery', []);
     }
 
 };

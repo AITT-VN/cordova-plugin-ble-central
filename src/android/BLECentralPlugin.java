@@ -168,6 +168,13 @@ public class BLECentralPlugin extends CordovaPlugin {
             findLowEnergyDevices(callbackContext, serviceUUIDs, -1);
 
         } else if (action.equals(STOP_SCAN)) {
+            /**
+             * AITT: cancel if it is discovering
+             */
+            if (bluetoothAdapter.isDiscovering()) {
+                LOG.d(TAG, "Bluetooth is discorvering need to cancel first");
+                bluetoothAdapter.cancelDiscovery();
+            }
 
             bluetoothLeScanner.stopScan(leScanCallback);
             callbackContext.success();
@@ -336,6 +343,37 @@ public class BLECentralPlugin extends CordovaPlugin {
         } else if (action.equals(BONDED_DEVICES)) {
 
             getBondedDevices(callbackContext);
+
+        } else if (action.equals(START_SCAN_BLT)) {
+            /**
+             * AITT: add more actions for new scan solution
+             */
+
+            startScanBLT(callbackContext);
+
+        } else if (action.equals(REGISTER_SCAN_DONE_NOTIFICATION)) {
+
+            registerScanDoneNotification(callbackContext);
+
+        } else if (action.equals(IS_DISCOVERING)) {
+
+            return bluetoothAdapter.isDiscovering();
+
+        } else if (action.equals(START_DISCOVERY)) {
+            boolean success = bluetoothAdapter.startDiscovery();
+            if (!success) {
+                String message = "Can not start Discovery";
+                LOG.w(TAG, message);
+                callbackContext.error(message);
+            }
+
+        } else if (action.equals(CANCEL_DISCOVERY)) {
+            boolean success = bluetoothAdapter.cancelDiscovery();
+            if (!success) {
+                String message = "Can not cancel Discovery";
+                LOG.w(TAG, message);
+                callbackContext.error(message);
+            }
 
         } else {
 
@@ -876,6 +914,106 @@ public class BLECentralPlugin extends CordovaPlugin {
      */
     private void resetScanOptions() {
         this.reportDuplicates = false;
+    }
+
+    /**
+     * AITT: Add new scan solution otion for bluetooth, not ble
+     */
+    private static final String START_SCAN_BLT = "startScanBLT";
+    private static final String REGISTER_SCAN_DONE_NOTIFICATION = "registerScanDoneNotification";
+    private static final String IS_DISCOVERING = "isDiscovering";
+    private static final String START_DISCOVERY = "startDiscovery";
+    private static final String CANCEL_DISCOVERY = "cancelDiscovery";    
+
+    CallbackContext scanDoneCallback;
+    BroadcastReceiver scanReceiver = null;
+
+    private void registerScanDoneNotification(CallbackContext callbackContext) {
+        scanDoneCallback = callbackContext;
+    }
+
+    private void registerFoundDeviceNotification(CallbackContext callbackContext) {
+        try {
+            if (scanReceiver != null) {
+                webView.getContext().unregisterReceiver(scanReceiver);
+            }
+
+            scanReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    String action = intent.getAction();
+
+                    if (BluetoothDevice.ACTION_FOUND.equals(action)) {
+                        BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                        int i_rssi;
+                        try {
+                            i_rssi = Integer.parseInt(intent.getParcelableExtra(BluetoothDevice.EXTRA_RSSI));
+                        }
+                        catch (Exception e)
+                        {
+                            i_rssi = 0;
+                        }
+                        String address = device.getAddress();
+                        LOG.d(TAG, "BluetoothDevice scan: " + device.getName());
+                        if (device != null && !peripherals.containsKey(address)) {
+                            Peripheral peripheral = new Peripheral(device, i_rssi, null);
+                            peripherals.put(address, peripheral);
+                            if (discoverCallback != null) {
+                                PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, peripheral.asJSONObject());
+                                pluginResult.setKeepCallback(true);
+                                discoverCallback.sendPluginResult(pluginResult);
+                            }
+                        }
+                    }
+                    else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
+                        scanDoneCallback.success("scanDone");
+                        LOG.d(TAG, "scan done!");
+                    }
+                }
+            };
+
+            IntentFilter intentFilter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
+            intentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
+            webView.getContext().registerReceiver(scanReceiver, intentFilter);
+
+            intentFilter = new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
+            webView.getContext().registerReceiver(scanReceiver, intentFilter);
+
+        } catch (Exception e) {
+            callbackContext.error("Error: " + e.getMessage());
+            return;
+        }
+    }
+    
+    private void startScanBLT(CallbackContext callbackContext) {
+        try {
+
+            if (scanReceiver == null) {
+                registerFoundDeviceNotification(callbackContext);
+            }
+
+            // clear non-connected cached peripherals
+            for(Iterator<Map.Entry<String, Peripheral>> iterator = peripherals.entrySet().iterator(); iterator.hasNext(); ) {
+                Map.Entry<String, Peripheral> entry = iterator.next();
+                Peripheral device = entry.getValue();
+                boolean connecting = device.isConnecting();
+                if (connecting){
+                    LOG.d(TAG, "Not removing connecting device: " + device.getDevice().getAddress());
+                }
+                if(!entry.getValue().isConnected() && !connecting) {
+                    iterator.remove();
+                }
+            }
+
+            discoverCallback = callbackContext;
+
+            bluetoothAdapter.startDiscovery();
+            LOG.d(TAG, "start discorvery");
+
+        } catch (Exception e) {
+            callbackContext.error("Error: " + e.getMessage());
+            return;
+        }
     }
 
 }
