@@ -945,18 +945,10 @@ public class BLECentralPlugin extends CordovaPlugin {
 
                     if (BluetoothDevice.ACTION_FOUND.equals(action)) {
                         BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                        int i_rssi;
-                        try {
-                            i_rssi = Integer.parseInt(intent.getParcelableExtra(BluetoothDevice.EXTRA_RSSI));
-                        }
-                        catch (Exception e)
-                        {
-                            i_rssi = 0;
-                        }
                         String address = device.getAddress();
                         LOG.d(TAG, "BluetoothDevice scan: " + device.getName());
                         if (device != null && !peripherals.containsKey(address)) {
-                            Peripheral peripheral = new Peripheral(device, i_rssi, null);
+                            Peripheral peripheral = new Peripheral(device);
                             peripherals.put(address, peripheral);
                             if (discoverCallback != null) {
                                 PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, peripheral.asJSONObject());
